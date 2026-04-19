@@ -15,7 +15,7 @@
           ps.pyyaml
         ]);
 
-        tex = pkgs.texliveMedium.withPackages (ps: [
+        tex = pkgs.texliveSmall.withPackages (ps: [
           ps.xurl
           ps.ulem
           ps.pdflscape
