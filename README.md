@@ -213,11 +213,9 @@ The current filter improves many cases automatically, but some tables are simply
 Potential next steps include:
 
 - [x] landscape support for especially wide tables
-- [] a smaller TeX dependency set
+- [x] a smaller TeX dependency set
 - [x] configurable page size and margins
 - [x] optional ref-style link render support
-~- [] optional bibliography and citation support~
-~- [] support for additional diagram preprocessors~
 
 ## License
 
