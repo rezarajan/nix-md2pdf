@@ -40,6 +40,38 @@ If the source markdown contains reference-style links ([somelink]: <url>) then t
 nix run . -- doc.md -o doc.pdf --render-reference-links
 ```
 
+You can also override the heading used for that section:
+
+```bash
+nix run . -- doc.md -o doc.pdf --render-reference-links --reference-links-title "Sources"
+```
+
+Page size and margins are configurable from the CLI.
+Use a different page size:
+
+```bash
+nix run . -- doc.md -o doc.pdf --page-size letter
+```
+
+Set a uniform margin on all sides:
+```bash
+nix run . -- doc.md -o doc.pdf --margin 1in
+```
+
+Set side-specific margins:
+```bash
+nix run . -- doc.md -o doc.pdf --margin-top 0.9in --margin-bottom 1in --margin-left 0.75in --margin-right 0.75in
+```
+
+Supported page sizes are:
+
+- `a4`
+- `letter`
+- `legal`
+
+Margin values accept standard LaTeX dimensions such as in, cm, mm, and pt.
+
+
 Open a development shell and use the generated command directly:
 
 ```bash
@@ -182,7 +214,7 @@ Potential next steps include:
 
 - [x] landscape support for especially wide tables
 - [] a smaller TeX dependency set
-- [] configurable page size and margins
+- [x] configurable page size and margins
 - [x] optional ref-style link render support
 ~- [] optional bibliography and citation support~
 ~- [] support for additional diagram preprocessors~
