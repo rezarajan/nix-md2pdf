@@ -1,5 +1,5 @@
 {
-  description = "Convert Markdown to PDF with Python, Mermaid direct PDF output, Pandoc, and linked source rendering";
+  description = "Convert Markdown to PDF with Python, Mermaid direct PDF output, Pandoc, and configurable page layout";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -16,8 +16,6 @@
         ]);
 
         headerTex = pkgs.writeText "md2pdf-header.tex" ''
-          \usepackage[a4paper,margin=0.85in,top=0.9in,bottom=0.9in]{geometry}
-
           \usepackage{fontspec}
           \setmainfont{TeX Gyre Termes}
           \setsansfont{TeX Gyre Heros}
@@ -308,6 +306,13 @@
               re.DOTALL | re.MULTILINE
           )
           REFDEF_RE = re.compile(r"^\[([^\]]+)\]:\s*(\S+)(?:\s+.*)?$", re.MULTILINE)
+          DIM_RE = re.compile(r"^\d+(?:\.\d+)?(?:in|cm|mm|pt)$")
+          ALLOWED_PAGE_SIZES = {"a4", "letter", "legal"}
+          GEOMETRY_PAGE_SIZES = {
+              "a4": "a4paper",
+              "letter": "letterpaper",
+              "legal": "legalpaper",
+          }
 
           def run(cmd, **kwargs):
               subprocess.run(cmd, check=True, **kwargs)
@@ -338,6 +343,46 @@
               if not isinstance(data, dict):
                   data = {}
               return data, body
+
+          def validate_page_size(value: str):
+              v = value.strip().lower()
+              if v not in ALLOWED_PAGE_SIZES:
+                  print(
+                      f"Unsupported page size: {value}. Allowed values: {', '.join(sorted(ALLOWED_PAGE_SIZES))}",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+              return v
+
+          def validate_dimension(name: str, value: str):
+              v = value.strip()
+              if not DIM_RE.match(v):
+                  print(
+                      f"Invalid {name}: {value}. Expected a LaTeX dimension like 1in, 2.54cm, 20mm, or 12pt.",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+              return v
+
+          def build_geometry_include(page_size, margin, margin_top, margin_bottom, margin_left, margin_right, tmpdir):
+              opts = [GEOMETRY_PAGE_SIZES[page_size]]
+
+              if margin is not None:
+                  opts.append(f"margin={margin}")
+              else:
+                  if margin_top is not None:
+                      opts.append(f"top={margin_top}")
+                  if margin_bottom is not None:
+                      opts.append(f"bottom={margin_bottom}")
+                  if margin_left is not None:
+                      opts.append(f"left={margin_left}")
+                  if margin_right is not None:
+                      opts.append(f"right={margin_right}")
+
+              content = "\\usepackage[" + ",".join(opts) + "]{geometry}\n"
+              path = tmpdir / "geometry.tex"
+              path.write_text(content, encoding="utf-8")
+              return path
 
           def make_title_page_tex(meta: dict) -> str:
               title = meta.get("title")
@@ -471,7 +516,7 @@
 
           def main():
               parser = argparse.ArgumentParser(
-                  description="Convert Markdown to PDF with Mermaid diagrams, linked source rendering, and a title page."
+                  description="Convert Markdown to PDF with Mermaid diagrams, linked source rendering, configurable page size and margins, and a title page."
               )
               parser.add_argument("input", help="Input markdown file")
               parser.add_argument("-o", "--output", help="Output PDF path")
@@ -485,6 +530,19 @@
                   default="Linked Sources",
                   help="Heading used for rendered reference links"
               )
+              parser.add_argument(
+                  "--page-size",
+                  default="a4",
+                  help="Page size: a4, letter, or legal"
+              )
+              parser.add_argument(
+                  "--margin",
+                  help="Uniform page margin, e.g. 1in or 2.54cm"
+              )
+              parser.add_argument("--margin-top", help="Top margin, e.g. 0.9in")
+              parser.add_argument("--margin-bottom", help="Bottom margin, e.g. 0.9in")
+              parser.add_argument("--margin-left", help="Left margin, e.g. 0.85in")
+              parser.add_argument("--margin-right", help="Right margin, e.g. 0.85in")
               args = parser.parse_args()
 
               input_path = pathlib.Path(args.input).resolve()
@@ -498,10 +556,37 @@
                   else input_path.with_suffix(".pdf")
               )
 
+              page_size = validate_page_size(args.page_size)
+
+              margin = validate_dimension("margin", args.margin) if args.margin else None
+              margin_top = validate_dimension("margin-top", args.margin_top) if args.margin_top else None
+              margin_bottom = validate_dimension("margin-bottom", args.margin_bottom) if args.margin_bottom else None
+              margin_left = validate_dimension("margin-left", args.margin_left) if args.margin_left else None
+              margin_right = validate_dimension("margin-right", args.margin_right) if args.margin_right else None
+
+              if margin is None:
+                  if margin_top is None:
+                      margin_top = "0.9in"
+                  if margin_bottom is None:
+                      margin_bottom = "0.9in"
+                  if margin_left is None:
+                      margin_left = "0.85in"
+                  if margin_right is None:
+                      margin_right = "0.85in"
+
               with tempfile.TemporaryDirectory() as td:
                   tmpdir = pathlib.Path(td)
                   processed_md = tmpdir / "document.md"
                   titlepage_tex = tmpdir / "titlepage.tex"
+                  geometry_tex = build_geometry_include(
+                      page_size=page_size,
+                      margin=margin,
+                      margin_top=margin_top,
+                      margin_bottom=margin_bottom,
+                      margin_left=margin_left,
+                      margin_right=margin_right,
+                      tmpdir=tmpdir,
+                  )
 
                   source = input_path.read_text(encoding="utf-8")
                   meta, body = parse_frontmatter(source)
@@ -527,6 +612,7 @@
                       "--standalone",
                       "--toc",
                       "--pdf-engine=xelatex",
+                      f"--include-in-header={geometry_tex}",
                       f"--include-in-header=${headerTex}",
                       f"--include-before-body={titlepage_tex}",
                       f"--lua-filter=${filtersLua}",
