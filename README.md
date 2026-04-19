@@ -183,4 +183,4 @@ Potential next steps include:
 
 ## License
 
-This project is licensed under the [GNU GPLv3](./LICENSE.md)
+This project is licensed under the [GNU GPLv3](./LICENSE)
