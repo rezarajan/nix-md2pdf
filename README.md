@@ -35,7 +35,7 @@ Write to a specific output file:
 nix run . -- doc.md -o doc.pdf
 ```
 
-If the doc contains reference-style links ([somelink]: <url>) then they can be included at the end of the render:
+If the source markdown contains reference-style links ([somelink]: <url>) then they can be included (in alphabetical order) at the end of the document:
 ```bash
 nix run . -- doc.md -o doc.pdf --render-reference-links
 ```

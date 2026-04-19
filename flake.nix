@@ -452,6 +452,8 @@
               if not refs:
                   return ""
 
+              refs = sorted(refs, key=lambda x: x[0].casefold())
+
               lines = ["", f"## {title}", "", "```{=latex}"]
               for label, url in refs:
                   safe_label = tex_escape(label)
