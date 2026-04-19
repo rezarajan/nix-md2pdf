@@ -33,6 +33,7 @@
           \usepackage{xurl}
           \usepackage[normalem]{ulem}
           \usepackage{hyperref}
+          \usepackage{pdflscape}
 
           \setlength{\LTleft}{0pt}
           \setlength{\LTright}{0pt}
@@ -49,11 +50,9 @@
             pdfborder={0 0 0}
           }
 
-          % Make displayed link text underlined while preserving actual clickability.
           \let\mdtwopdforighref\href
           \renewcommand{\href}[2]{\mdtwopdforighref{#1}{\uline{#2}}}
 
-          % Keep bare URLs clickable and visibly distinct too.
           \let\mdtwopdforigurl\url
           \renewcommand{\url}[1]{\href{#1}{\nolinkurl{#1}}}
 
@@ -202,6 +201,55 @@
             return rows
           end
 
+          local function analyze_table(tbl)
+            local n = #tbl.colspecs
+            local rows = collect_rows(tbl)
+            local weights = {}
+            local total = 0
+            local longest_cell = 0
+
+            for i = 1, n do
+              weights[i] = 8
+            end
+
+            for _, row in ipairs(rows) do
+              for i, cell in ipairs(row.cells) do
+                local len = cell_text_len(cell)
+                if len > longest_cell then
+                  longest_cell = len
+                end
+                weights[i] = math.max(weights[i], clamp(math.sqrt(len) * 2.6, 8, 42))
+              end
+            end
+
+            for i = 1, n do
+              weights[i] = clamp(weights[i], 8, 30)
+              total = total + weights[i]
+            end
+
+            return {
+              colcount = n,
+              weights = weights,
+              total = total,
+              longest_cell = longest_cell,
+            }
+          end
+
+          local function should_landscape(stats)
+            -- Practical heuristic:
+            -- many columns, or enough total estimated width to justify rotation.
+            if stats.colcount >= 7 then
+              return true
+            end
+            if stats.total >= 95 then
+              return true
+            end
+            if stats.colcount >= 5 and stats.longest_cell >= 80 then
+              return true
+            end
+            return false
+          end
+
           function Table(tbl)
             local n = #tbl.colspecs
             if n == 0 then
@@ -216,29 +264,24 @@
               end
             end
 
-            local weights = {}
+            local stats = analyze_table(tbl)
             local total = 0
-
             for i = 1, n do
-              weights[i] = 8
-            end
-
-            for _, row in ipairs(rows) do
-              for i, cell in ipairs(row.cells) do
-                local len = cell_text_len(cell)
-                weights[i] = math.max(weights[i], clamp(math.sqrt(len) * 2.6, 8, 42))
-              end
-            end
-
-            for i = 1, n do
-              weights[i] = clamp(weights[i], 8, 30)
-              total = total + weights[i]
+              total = total + stats.weights[i]
             end
 
             for i = 1, n do
               local align = tbl.colspecs[i][1]
-              local width = weights[i] / total
+              local width = stats.weights[i] / total
               tbl.colspecs[i] = { align, width }
+            end
+
+            if should_landscape(stats) then
+              return {
+                pandoc.RawBlock("latex", "\\begin{landscape}"),
+                tbl,
+                pandoc.RawBlock("latex", "\\end{landscape}")
+              }
             end
 
             return tbl
@@ -400,11 +443,6 @@
               )
               parser.add_argument("input", help="Input markdown file")
               parser.add_argument("-o", "--output", help="Output PDF path")
-              parser.add_argument(
-                  "--keep-tex",
-                  action="store_true",
-                  help="Write the intermediate LaTeX file beside the output PDF"
-              )
               args = parser.parse_args()
 
               input_path = pathlib.Path(args.input).resolve()
@@ -417,7 +455,6 @@
                   if args.output
                   else input_path.with_suffix(".pdf")
               )
-              tex_path = output_path.with_suffix(".tex")
 
               with tempfile.TemporaryDirectory() as td:
                   tmpdir = pathlib.Path(td)
@@ -446,12 +483,10 @@
                       f"--include-before-body={titlepage_tex}",
                       f"--lua-filter=${filtersLua}",
                       f"--resource-path={resource_path}",
+                      "-o", str(output_path),
                   ]
 
-                  if args.keep_tex:
-                      run(common_cmd + ["-t", "latex", "-o", str(tex_path)])
-
-                  run(common_cmd + ["-o", str(output_path)])
+                  run(common_cmd)
 
               print(f"Wrote {output_path}")
 

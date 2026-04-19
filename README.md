@@ -175,11 +175,11 @@ The current filter improves many cases automatically, but some tables are simply
 
 Potential next steps include:
 
-- [] landscape support for especially wide tables
-- [] a smaller TeX dependency set
-- [] configurable page size and margins
-- [] optional bibliography and citation support
-- [] support for additional diagram preprocessors
+-[x] landscape support for especially wide tables
+-[] a smaller TeX dependency set
+-[] configurable page size and margins
+-[] optional bibliography and citation support
+-[] support for additional diagram preprocessors
 
 ## License
 
