@@ -1,5 +1,5 @@
 {
-  description = "Convert Markdown to PDF with Python, Mermaid direct PDF output, Pandoc, and a title page";
+  description = "Convert Markdown to PDF with Python, Mermaid direct PDF output, Pandoc, and linked source rendering";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -44,17 +44,18 @@
           \emergencystretch=2em
 
           \urlstyle{same}
+          \Urlmuskip=0mu plus 3mu\relax
+
           \hypersetup{
             colorlinks=false,
             hidelinks=false,
+            breaklinks=true,
             pdfborder={0 0 0}
           }
 
+          % Keep normal in-document links visibly identifiable.
           \let\mdtwopdforighref\href
           \renewcommand{\href}[2]{\mdtwopdforighref{#1}{\uline{#2}}}
-
-          \let\mdtwopdforigurl\url
-          \renewcommand{\url}[1]{\href{#1}{\nolinkurl{#1}}}
 
           \AtBeginEnvironment{longtable}{\small}
         '';
@@ -236,8 +237,6 @@
           end
 
           local function should_landscape(stats)
-            -- Practical heuristic:
-            -- many columns, or enough total estimated width to justify rotation.
             if stats.colcount >= 7 then
               return true
             end
@@ -308,6 +307,7 @@
               r"(^```[^\n]*\n.*?^```[ \t]*$)",
               re.DOTALL | re.MULTILINE
           )
+          REFDEF_RE = re.compile(r"^\[([^\]]+)\]:\s*(\S+)(?:\s+.*)?$", re.MULTILINE)
 
           def run(cmd, **kwargs):
               subprocess.run(cmd, check=True, **kwargs)
@@ -437,12 +437,54 @@
 
               return MERMAID_BLOCK_RE.sub(repl, text)
 
+          def extract_reference_definitions(text: str):
+              refs = []
+              for m in REFDEF_RE.finditer(text):
+                  label = m.group(1).strip()
+                  url = m.group(2).strip()
+                  refs.append((label, url))
+              return refs
+
+          def remove_reference_definitions(text: str):
+              return REFDEF_RE.sub("", text)
+
+          def build_linked_sources_section(title: str, refs):
+              if not refs:
+                  return ""
+
+              refs = sorted(refs, key=lambda x: x[0].casefold())
+
+              lines = ["", f"## {title}", "", "```{=latex}"]
+              for label, url in refs:
+                  safe_label = tex_escape(label)
+                  safe_url = tex_escape(url)
+                  lines.append(
+                      "\\noindent\\texttt{["
+                      + safe_label
+                      + "]:} \\url{"
+                      + safe_url
+                      + "}\\\\"
+                  )
+              lines.append("```")
+              lines.append("")
+              return "\n".join(lines)
+
           def main():
               parser = argparse.ArgumentParser(
-                  description="Convert Markdown to PDF with Mermaid diagrams and a title page."
+                  description="Convert Markdown to PDF with Mermaid diagrams, linked source rendering, and a title page."
               )
               parser.add_argument("input", help="Input markdown file")
               parser.add_argument("-o", "--output", help="Output PDF path")
+              parser.add_argument(
+                  "--render-reference-links",
+                  action="store_true",
+                  help="Render Markdown reference definitions as a Linked Sources section"
+              )
+              parser.add_argument(
+                  "--reference-links-title",
+                  default="Linked Sources",
+                  help="Heading used for rendered reference links"
+              )
               args = parser.parse_args()
 
               input_path = pathlib.Path(args.input).resolve()
@@ -465,6 +507,12 @@
                   meta, body = parse_frontmatter(source)
 
                   titlepage_tex.write_text(make_title_page_tex(meta), encoding="utf-8")
+
+                  if args.render_reference_links:
+                      refs = extract_reference_definitions(body)
+                      body = remove_reference_definitions(body).rstrip()
+                      if refs:
+                          body = body + "\n" + build_linked_sources_section(args.reference_links_title, refs)
 
                   body = escape_currency_dollars(body)
                   processed_body = render_mermaid_blocks(body, tmpdir)

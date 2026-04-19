@@ -35,6 +35,11 @@ Write to a specific output file:
 nix run . -- doc.md -o doc.pdf
 ```
 
+If the source markdown contains reference-style links ([somelink]: <url>) then they can be included (in alphabetical order) at the end of the document:
+```bash
+nix run . -- doc.md -o doc.pdf --render-reference-links
+```
+
 Open a development shell and use the generated command directly:
 
 ```bash
@@ -175,11 +180,12 @@ The current filter improves many cases automatically, but some tables are simply
 
 Potential next steps include:
 
--[x] landscape support for especially wide tables
--[] a smaller TeX dependency set
--[] configurable page size and margins
--[] optional bibliography and citation support
--[] support for additional diagram preprocessors
+- [x] landscape support for especially wide tables
+- [] a smaller TeX dependency set
+- [] configurable page size and margins
+- [x] optional ref-style link render support
+~- [] optional bibliography and citation support~
+~- [] support for additional diagram preprocessors~
 
 ## License
 
