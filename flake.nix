@@ -15,6 +15,13 @@
           ps.pyyaml
         ]);
 
+        tex = pkgs.texliveSmall.withPackages (ps: [
+          ps.xurl
+          ps.ulem
+          ps.pdflscape
+          ps.collection-fontsrecommended
+        ]);
+
         headerTex = pkgs.writeText "md2pdf-header.tex" ''
           \usepackage{fontspec}
           \setmainfont{TeX Gyre Termes}
@@ -51,7 +58,6 @@
             pdfborder={0 0 0}
           }
 
-          % Keep normal in-document links visibly identifiable.
           \let\mdtwopdforighref\href
           \renewcommand{\href}[2]{\mdtwopdforighref{#1}{\uline{#2}}}
 
@@ -635,7 +641,7 @@
             python
             pkgs.pandoc
             pkgs.mermaid-cli
-            pkgs.texliveFull
+            tex
           ];
           text = ''
             exec ${python}/bin/python ${md2pdfPy} "$@"
@@ -652,7 +658,7 @@
             python
             pkgs.pandoc
             pkgs.mermaid-cli
-            pkgs.texliveFull
+            tex
             self.packages.${system}.default
           ];
         };
