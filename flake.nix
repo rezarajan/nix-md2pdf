@@ -311,7 +311,8 @@
               r"(^```[^\n]*\n.*?^```[ \t]*$)",
               re.DOTALL | re.MULTILINE
           )
-          REFDEF_RE = re.compile(r"^\[([^\]]+)\]:\s*(\S+)(?:\s+.*)?$", re.MULTILINE)
+          REFDEF_RE = re.compile(r"^\[([^\]]+)\]:[ \t]*(\S+)(?:[ \t]+.*)?$", re.MULTILINE)
+          FULL_REF_LINK_RE = re.compile(r'(?<!\!)\[([^\[\]\n]+?)\]\[([^\[\]\n]+?)\]')
           DIM_RE = re.compile(r"^\d+(?:\.\d+)?(?:in|cm|mm|pt)$")
           ALLOWED_PAGE_SIZES = {"a4", "letter", "legal"}
           GEOMETRY_PAGE_SIZES = {
@@ -335,6 +336,14 @@
                   "}": r"\}",
                   "~": r"\textasciitilde{}",
                   "^": r"\textasciicircum{}",
+              }
+              return "".join(replacements.get(ch, ch) for ch in value)
+
+          def tex_escape_url(value: str) -> str:
+              replacements = {
+                  "\\": r"\textbackslash{}",
+                  "{": r"\{",
+                  "}": r"\}",
               }
               return "".join(replacements.get(ch, ch) for ch in value)
 
@@ -434,15 +443,21 @@
               parts.append("")
               return "\n".join(parts)
 
+          def split_fenced_blocks(text: str):
+              return FENCED_BLOCK_RE.split(text)
+
+          def is_fenced_block(part: str):
+              return bool(part) and bool(FENCED_BLOCK_RE.match(part))
+
           def escape_currency_dollars(text: str) -> str:
-              parts = FENCED_BLOCK_RE.split(text)
+              parts = split_fenced_blocks(text)
               out = []
 
               for part in parts:
                   if not part:
                       continue
 
-                  if FENCED_BLOCK_RE.match(part):
+                  if is_fenced_block(part):
                       out.append(part)
                       continue
 
@@ -496,8 +511,57 @@
                   refs.append((label, url))
               return refs
 
-          def remove_reference_definitions(text: str):
-              return REFDEF_RE.sub("", text)
+          def annotate_reference_links(text: str, refs, include_inline_labels: bool):
+              if not refs:
+                  return text
+
+              refmap = {label.casefold(): (label, url) for label, url in refs}
+              parts = split_fenced_blocks(text)
+              out = []
+
+              def repl(match):
+                  link_text = match.group(1)
+                  label = match.group(2).strip()
+                  normalized = label.casefold()
+
+                  if normalized not in refmap:
+                      return match.group(0)
+
+                  canonical_label, url = refmap[normalized]
+                  safe_text = tex_escape(link_text)
+                  safe_label = tex_escape(canonical_label)
+                  safe_url = tex_escape_url(url)
+
+                  if include_inline_labels:
+                      return (
+                          "\\mdtwopdforighref{"
+                          + safe_url
+                          + "}{\\uline{"
+                          + safe_text
+                          + "} ["
+                          + safe_label
+                          + "]}"
+                      )
+
+                  return (
+                      "\\mdtwopdforighref{"
+                      + safe_url
+                      + "}{\\uline{"
+                      + safe_text
+                      + "}}"
+                  )
+
+              for part in parts:
+                  if not part:
+                      continue
+
+                  if is_fenced_block(part):
+                      out.append(part)
+                      continue
+
+                  out.append(FULL_REF_LINK_RE.sub(repl, part))
+
+              return "".join(out)
 
           def build_linked_sources_section(title: str, refs):
               if not refs:
@@ -535,6 +599,11 @@
                   "--reference-links-title",
                   default="Linked Sources",
                   help="Heading used for rendered reference links"
+              )
+              parser.add_argument(
+                  "--inline-reference-labels",
+                  action="store_true",
+                  help="Append reference labels like [theobald2020] inline after linked reference text"
               )
               parser.add_argument(
                   "--page-size",
@@ -599,11 +668,11 @@
 
                   titlepage_tex.write_text(make_title_page_tex(meta), encoding="utf-8")
 
-                  if args.render_reference_links:
-                      refs = extract_reference_definitions(body)
-                      body = remove_reference_definitions(body).rstrip()
-                      if refs:
-                          body = body + "\n" + build_linked_sources_section(args.reference_links_title, refs)
+                  refs = extract_reference_definitions(body)
+                  body = annotate_reference_links(body, refs, args.inline_reference_labels)
+
+                  if args.render_reference_links and refs:
+                      body = body.rstrip() + "\n" + build_linked_sources_section(args.reference_links_title, refs)
 
                   body = escape_currency_dollars(body)
                   processed_body = render_mermaid_blocks(body, tmpdir)
