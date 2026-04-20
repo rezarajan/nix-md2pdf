@@ -46,6 +46,13 @@ You can also override the heading used for that section:
 nix run . -- doc.md -o doc.pdf --render-reference-links --reference-links-title "Sources"
 ```
 
+
+If you want to include the reference block label next to the link, use `--inline-reference-labels`:
+
+```bash
+nix run . -- doc.md -o doc.pdf --render-reference-links --inline-reference-labels --reference-links-title "Sources"
+```
+
 Page size and margins are configurable from the CLI.
 Use a different page size:
 
