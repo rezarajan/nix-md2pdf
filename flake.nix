@@ -339,11 +339,15 @@
               }
               return "".join(replacements.get(ch, ch) for ch in value)
 
-          def tex_escape_url(value: str) -> str:
+          def tex_escape_href_url(value: str) -> str:
               replacements = {
                   "\\": r"\textbackslash{}",
                   "{": r"\{",
                   "}": r"\}",
+                  "%": r"\%",
+                  "#": r"\#",
+                  "&": r"\&",
+                  "_": r"\_",
               }
               return "".join(replacements.get(ch, ch) for ch in value)
 
@@ -449,7 +453,7 @@
           def is_fenced_block(part: str):
               return bool(part) and bool(FENCED_BLOCK_RE.match(part))
 
-          def escape_currency_dollars(text: str) -> str:
+          def escape_currency_dollars(text: str):
               parts = split_fenced_blocks(text)
               out = []
 
@@ -511,6 +515,9 @@
                   refs.append((label, url))
               return refs
 
+          def make_raw_latex_inline(latex: str) -> str:
+              return "`" + latex + "`{=latex}"
+
           def annotate_reference_links(text: str, refs, include_inline_labels: bool):
               if not refs:
                   return text
@@ -530,10 +537,10 @@
                   canonical_label, url = refmap[normalized]
                   safe_text = tex_escape(link_text)
                   safe_label = tex_escape(canonical_label)
-                  safe_url = tex_escape_url(url)
+                  safe_url = tex_escape_href_url(url)
 
                   if include_inline_labels:
-                      return (
+                      latex = (
                           "\\mdtwopdforighref{"
                           + safe_url
                           + "}{\\uline{"
@@ -542,14 +549,16 @@
                           + safe_label
                           + "]}"
                       )
+                  else:
+                      latex = (
+                          "\\mdtwopdforighref{"
+                          + safe_url
+                          + "}{\\uline{"
+                          + safe_text
+                          + "}}"
+                      )
 
-                  return (
-                      "\\mdtwopdforighref{"
-                      + safe_url
-                      + "}{\\uline{"
-                      + safe_text
-                      + "}}"
-                  )
+                  return make_raw_latex_inline(latex)
 
               for part in parts:
                   if not part:
